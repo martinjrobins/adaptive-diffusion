@@ -1,0 +1,3 @@
+[submodule "Aboria"]
+	path = Aboria
+	url = git@github.com:martinjrobins/Aboria.git
