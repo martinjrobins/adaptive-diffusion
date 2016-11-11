@@ -24,7 +24,7 @@ dx = ri-rj
 d = symbols(r'd',positive=true)
 k = symbols(r'k',positive=true)
 
-#k = exp(-dx.dot(dx)*cj)
+#kij = exp(-dx.dot(dx)/(h**2))
 kij = Piecewise(((2-dx.norm()/h)**4*(1 + 2*dx.norm()/h),dx.norm()<2*h),(0,True))
 print '---------------------------------------'
 print '           k_ij'
@@ -35,7 +35,7 @@ print '-----------------------------------------------------'
 print '           du/dt = d^2k_ijdx^2 + d^2k_ijdy^2'
 print '----------------------------------------------------'
 laplace = diff(diff(kij,xi),xi) + diff(diff(kij,yi),yi)
-pprint(simplify(expand(laplace)))
+pprint(simplify(laplace))
 
 print '---------------------------------------'
 print '           dx/dt = force '

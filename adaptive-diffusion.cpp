@@ -16,7 +16,9 @@ template<typename Kernel,typename VectorType>
 void solve(Kernel &&kernel, VectorType &&result, VectorType &&source, size_t max_iter=10, size_t restart=10, linear_solver solver=CG) {
     switch (solver) {
         case CG: {
-            Eigen::ConjugateGradient<Kernel, Eigen::Lower|Eigen::Upper, Eigen::DiagonalPreconditioner<double>> cg;
+            Eigen::ConjugateGradient<
+                typename std::remove_reference<Kernel>::type, 
+                         Eigen::Lower|Eigen::Upper, Eigen::DiagonalPreconditioner<double>> cg;
             cg.setMaxIterations(max_iter);
             cg.compute(kernel);
             result = cg.solveWithGuess(source,result);
@@ -24,7 +26,9 @@ void solve(Kernel &&kernel, VectorType &&result, VectorType &&source, size_t max
             break;
                  }
         case BiCGSTAB: {
-            Eigen::BiCGSTAB<Kernel, Eigen::DiagonalPreconditioner<double>> bicg;
+            Eigen::BiCGSTAB<
+                typename std::remove_reference<Kernel>::type, 
+                     Eigen::DiagonalPreconditioner<double>> bicg;
             bicg.setMaxIterations(max_iter);
             bicg.compute(kernel);
             result = bicg.solveWithGuess(source,result);
@@ -32,7 +36,9 @@ void solve(Kernel &&kernel, VectorType &&result, VectorType &&source, size_t max
             break;
                }
         case GMRES: {
-            Eigen::GMRES<Kernel, Eigen::DiagonalPreconditioner<double>> gmres;
+            Eigen::GMRES<
+                typename std::remove_reference<Kernel>::type, 
+                    Eigen::DiagonalPreconditioner<double>> gmres;
             gmres.set_restart(restart);
             gmres.setMaxIterations(max_iter);
             gmres.compute(kernel);
@@ -89,39 +95,45 @@ int main(int argc, char **argv) {
     ParticlesType knots;
 
     const double k = 0.5;
+    const double Tf = 10.0;
     const int max_iter = 100;
     const int restart = 100;
     double2 periodic(false);
 
-    constexpr int N = (nx+1)*(nx+1);
+    const double L = 1.0;
+    const double h0 = 2.0*L/nx;
     const double delta = 1.0/nx;
     typename ParticlesType::value_type p;
+    const double id_theta = 0.2;
+    const double id_alpha = 30.0;
     for (int i=0; i<=nx; ++i) {
         for (int j=0; j<=nx; ++j) {
             get<position>(p) = double2(i*delta,j*delta);
             if ((i==0)||(i==nx)||(j==0)||(j==nx)) {
                 get<boundary>(p) = true;
                 if (i==0) {
-                    get<temperature> = 1;
+                    get<temperature>(p) = 0.5*(tanh(id_alpha*(get<position>(p)[1]-id_theta))+tanh(id_alpha*(1-id_theta-get<position>(p)[1])));
                 } else {
-                    get<temperature> = 0;
+                    get<temperature>(p) = 0;
                 }
-
             } else {
                 get<boundary>(p) = false;
-                get<temperature> = 0;
+                get<temperature>(p) = 0;
             }
             get<kernel_constant>(p) = h0;
             knots.push_back(p);
         }
     }
 
+
+    knots.init_neighbour_search(double2(0-L/10),double2(L+L/10),2*h0,bool2(false));
+    std::cout << "added "<<knots.size()<<" knots" << std::endl;
+
     Symbol<boundary> is_b;
     Symbol<position> r;
     Symbol<kernel_constant> h;
     Symbol<temperature> u;
     Symbol<temperature_weights> w;
-    Symbol<temperature_change> dudt;
     Symbol<velocity> drdt;
     Symbol<resting_separation> d;
     Label<0,ParticlesType> a(knots);
@@ -130,61 +142,59 @@ int main(int argc, char **argv) {
     Accumulate<std::plus<double> > sum;
 
     auto kernel = deep_copy(
-            //exp(-pow(norm(dx),2)/c2[b])
-            //sqrt(pow(norm(dx),2) + c2[b])
-            pow(h[a]+h[b]-dx.norm(),4)*(16*(h[a]+h[b]) + 64*dx.norm())/pow(h[a]+h[b],5)
+            //exp(-4*dot(dx,dx)/pow(h[a]+h[b],2))
+            pow(h[a]+h[b]-norm(dx),4)*(16*(h[a]+h[b]) + 64*norm(dx))/pow(h[a]+h[b],5)
             );
 
     auto laplace_kernel = deep_copy(
-            //(2*c2[b] + pow(norm(dx),2)) / pow(pow(norm(dx),2) + c2[b],1.5)
-            //4*(pow(norm(dx),2) - c2[b]) * exp(-pow(norm(dx),2)/c2[b])/pow(c2[a],2)
-            65536*pow(h[a]+h[b]-dx.norm(),2)*(0.001953125*pow(dx[0],2)*(-2.5*(h[a]+h[b]) + 10*dx.norm()) + 0.0048828125*pow(dx[0],2)*(h[a]+h[b]-dx.norm()) + 0.001953125*pow(dx[1],2)*(-2.5*(h[a]+h[b])+10*dx.norm()) + 0.0048828125*pow(dx[1],2)*(h[a]+h[b]-dx.norm()) - 0.009765625*(pow(dx.norm(),2))*(h[a]+h[b]-dx.norm()))
+            //(-16*pow(h[a]+h[b],2)+64*dot(dx,dx))*exp(-4*dot(dx,dx)/pow(h[a]+h[b],2))/pow(h[a]+h[b],4)
+            65536.0*pow(h[a]+h[b]-norm(dx),2)*(0.001953125*pow(dx[0],2)*(-2.5*(h[a]+h[b]) + 10.0*norm(dx)) + 0.0048828125*pow(dx[0],2)*(h[a]+h[b]-norm(dx)) + 0.001953125*pow(dx[1],2)*(-2.5*(h[a]+h[b])+10.0*norm(dx)) + 0.0048828125*pow(dx[1],2)*(h[a]+h[b]-norm(dx)) - 0.009765625*(pow(norm(dx),2))*(h[a]+h[b]-norm(dx)))
             );
 
     auto force_kernel = deep_copy(
-            (-k*(d[a]+d[b]-dx.norm())/dx.norm())*dx
+            (-k*(d[a]+d[b]-norm(dx))/norm(dx))*dx
             );
     
     typedef Eigen::Matrix<double,Eigen::Dynamic,1> vector_type; 
     typedef Eigen::Map<vector_type> map_type;
 
- 
-    solve(create_eigen_operator(a,b,kernel),
-            map_type(get<temperature_weights>(knots).data(),knots.size()),
-            map_type(get<temperature>(knots).data(),knots.size()),max_iter_linear,restart_linear,(linear_solver)solver_in);
-    
 #ifdef HAVE_VTK
     vtkWriteGrid("init",1,knots.get_grid(true));
 #endif
 
+    const int timesteps = Tf/dt_aim;
+    const double dt = Tf/timesteps;
     auto t0 = Clock::now();
     for (int i=0; i < timesteps; i++) {
         auto t1 = Clock::now();
         std::chrono::duration<double> dt_timestep = t1 - t0;
         t0 = Clock::now();
         std::cout << "timestep "<<i<<"/"<<timesteps<<". Will finish in "<<dt_timestep.count()*(timesteps-i)/std::pow(60,2)<<" hours"<<std::endl;
-        //evaluate temporaries
-        dudt[a] = if_else(is_b[b],
-                    0,
-                    sum(b,dx.norm()<2*h,laplace_kernel*w[b])
-                    );
-        drdt[a] = if_else(is_b[a],
-                    0,
-                    sum(b,dx.norm()<d[a]+d[b],force_kernel)
-                    );
-                    
 
         //implicit euler step
         // Ku_n - Ku_n-1 = dt*K_lu_n
         // Ku_n - dt*K_lu_n =  Ku_n-1
         // (K-dt*K_l)*u_n =  K*u_n-1
-        r[a] += dt*drdt[a];
-        u[a] += dt*dudt[a];
+        // A*u_n =  K*u_n-1
+        auto A = create_eigen_operator(a,b,
+                    if_else(is_b[a],
+                       kernel,
+                       kernel - dt*laplace_kernel
+                    )
+                    ,norm(dx) < h[a]+h[b]
+                );
+        solve(A,map_type(get<temperature_weights>(knots).data(),knots.size()),
+                map_type(get<temperature>(knots).data(),knots.size()),
+                max_iter_linear,restart_linear,(linear_solver)solver_in);
 
-        solve(create_eigen_operator(a,b,kernel),
-            map_type(get<temperature_weights>(knots).data(),knots.size()),
-            map_type(get<temperature>(knots).data(),knots.size()),max_iter_linear,restart_linear,(linear_solver)solver_in);
-    
+        //u[a] = if_else(is_b[a],
+        //            u[a],
+        //            //sum(b,norm(dx)<h[a]+h[b],kernel*w[b])
+        //            sum(b,true,kernel*w[b])
+        //            );
+        //u[a] = sum(b,true,kernel*w[b]);
+        sum(b,norm(dx)<h[a]+h[b],kernel*w[b]);
+
 #ifdef HAVE_VTK
         vtkWriteGrid("explicit",i,knots.get_grid(true));
 #endif
