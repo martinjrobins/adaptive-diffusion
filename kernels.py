@@ -44,6 +44,20 @@ print '----------------------------------------------------'
 gradient = Matrix([diff(kij,xi),diff(kij,yi)]).norm()
 pprint(simplify(gradient))
 
+print '-----------------------------------------------------'
+print '           dk_ijdx'
+print '----------------------------------------------------'
+
+pprint(simplify(diff(kij,xi)))
+pprint(simplify(diff(kij,xj)))
+
+print '-----------------------------------------------------'
+print '           dk_ijdy'
+print '----------------------------------------------------'
+
+pprint(simplify(diff(kij,yi)))
+pprint(simplify(diff(kij,yj)))
+
 
 print '-----------------------------------------------------'
 print '           du/dt = d^2k_ijdx^2 + d^2k_ijdy^2'

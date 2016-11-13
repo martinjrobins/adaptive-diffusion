@@ -85,11 +85,13 @@ int main(int argc, char **argv) {
     ABORIA_VARIABLE(kernel_test,double,"kernel")
     ABORIA_VARIABLE(laplace_kernel_test,double,"laplace kernel")
     ABORIA_VARIABLE(velocity,double,"velocity")
+    ABORIA_VARIABLE(gradient,double2,"gradient")
+    ABORIA_VARIABLE(change_in_position,double2,"change in position")
     ABORIA_VARIABLE(temperature_weights,double,"temperature weights")
     ABORIA_VARIABLE(kernel_constant,double,"kernel constant")
     ABORIA_VARIABLE(resting_separation,double,"resting separation")
 
-    typedef Particles<std::tuple<temperature,kernel_test,laplace_kernel_test,velocity,temperature_weights,boundary,kernel_constant,resting_separation>,2> ParticlesType;
+    typedef Particles<std::tuple<temperature,kernel_test,laplace_kernel_test,velocity,temperature_weights,boundary,kernel_constant,gradient,change_in_position>,2> ParticlesType;
     typedef position_d<2> position;
     ParticlesType knots;
 
@@ -134,6 +136,8 @@ int main(int argc, char **argv) {
     Symbol<kernel_constant> h;
     Symbol<kernel_test> ktest;
     Symbol<laplace_kernel_test> lktest;
+    Symbol<gradient> g;
+    Symbol<change_in_position> dr;
     Symbol<temperature> u;
     Symbol<temperature_weights> w;
     Symbol<velocity> drdt;
@@ -160,6 +164,10 @@ int main(int argc, char **argv) {
 
     auto adapt_kernel = deep_copy(
             320.0*pow(h[a]+h[b]-norm(dx),2)*abs(h[a]+h[b]-norm(dx))*norm(dx)
+            );
+
+    auto gradient_kernel = deep_copy(
+            320.0*dx*pow(h[a]+h[b]-norm(dx),3)/pow(h[a]+h[b],5)
             );
 
     auto force_kernel = deep_copy(
@@ -195,6 +203,35 @@ int main(int argc, char **argv) {
     const int timesteps_adapt = std::ceil(dt/dt_adapt_aim);
     const double dt_apapt = dt/timesteps_adapt;
     std::cout << "doing "<<timesteps_adapt<<" adaptive timesteps"<<std::endl;
+    CHECK(timesteps_adapt==1,"assuming one adaptive timestep")
+
+    // semi-implicit euler step
+    // dKdt u + Kdudt = dt*k_lu u
+    // dt*dKdt u_n-1 + Ku_n - Ku_n-1 = dt*K_lu_n
+    // (K-dt*K_l)*u_n =  K*u_n-1 - dt*dKdt u_n-1
+    // A*u_n =  K*u_n-1 - dt*dKdt u_n-1
+    // A*u_n =  (K-dt*dKdt)*u_n-1
+    // A*u_n =  B*u_n-1
+    // dKdt = dKdx * dxdt + dKdy * dydt
+    auto B = deep_copy(
+                if_else(is_b[a],
+                   kernel,
+                   kernel + dt*dot(gradient_kernel,force_kernel)
+                )
+            );
+
+    // fully-implicit euler step
+    // dKdt u + Kdudt = dt*k_lu u
+    // dt*dKdt u_n + Ku_n - Ku_n-1 = dt*K_lu_n
+    // (dt*dKdt + K-dt*K_l)*u_n =  K*u_n-1
+    // C*u_n =  K*u_n-1
+    // dKdt = dKdx * dxdt + dKdy * dydt
+    auto C = create_eigen_operator(a,b,
+                if_else(is_b[a],
+                   kernel,
+                   kernel - dt*(laplace_kernel + dot(gradient_kernel,force_kernel))
+                )
+            );
 
     //implicit euler step
     // Ku_n - Ku_n-1 = dt*K_lu_n
@@ -221,18 +258,14 @@ int main(int argc, char **argv) {
                 map_type(get<temperature>(knots).data(),knots.size()),
                 max_iter_linear,restart_linear,(linear_solver)solver_in);
 
-        h[a] = h0/(1+10*sum(b,norm(dx)<h[a]+h[b],adapt_kernel*w[b]));
-        for (int j=0; j < timesteps_adapt; ++j) {
-            r[a] += if_else(is_b[a],0,1)
-                        *dt_apapt*sumv(b,norm(dx)<h[a]+h[b],force_kernel);
-        }
+        g[a] = sumv(b,norm(dx)<h[a]+h[b],gradient_kernel*w[b]);
+        h[a] = h0/(1+0.01*norm(g[a]));
+        r[a] += if_else(is_b[a],0,1)
+                        *dt*sumv(b,norm(dx)<h[a]+h[b],force_kernel);
 
-        u[a] = if_else(is_b[a]
-                    ,u[a]
-                    ,sum(b,norm(dx)<h[a]+h[b],kernel*w[b]) + dt*forcing
-                );
+        u[a] = sum(b,norm(dx)<h[a]+h[b],B*w[b]) + dt*forcing;
 
-#ifdef HAVE_VTK
+        #ifdef HAVE_VTK
         vtkWriteGrid("explicit",i,knots.get_grid(true));
 #endif
         
