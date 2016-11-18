@@ -38,6 +38,30 @@ pprint(simplify(kij))
 #plot(xeqi,(xi,-1,2),adaptive=False,nb_of_points=500)
 
 print '-----------------------------------------------------'
+print '           [dfdx,dfdy]'
+print '----------------------------------------------------'
+
+gradient = Matrix([diff(kij,xi),diff(kij,yi)])
+pprint(simplify(gradient))
+
+print '-----------------------------------------------------'
+print '           [df2dx2,df2dxy]'
+print '           [df2dyx,df2dy2]'
+print '----------------------------------------------------'
+laplace = Matrix([[diff(diff(kij,xi),xi),diff(diff(kij,yi),xi)],
+                  [diff(diff(kij,xi),yi),diff(diff(kij,yi),yi)]])
+pprint(simplify(laplace))
+
+
+print '-----------------------------------------------------'
+print '           -laplace*gradient'
+print '----------------------------------------------------'
+adapt = -laplace*gradient
+#adapt = adapt/((laplace.norm()+gradient.norm())**2)
+pprint(simplify(adapt))
+
+
+print '-----------------------------------------------------'
 print '           norm([dk_ijdx,dk_ijdy]'
 print '----------------------------------------------------'
 

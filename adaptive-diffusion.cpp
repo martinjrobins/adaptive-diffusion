@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
         ("force_b", po::value<double>(&force_b)->default_value(80), "force_b constant")
         ("k", po::value<double>(&k)->default_value(0.1), "spring constant")
         ("gamma", po::value<double>(&gamma)->default_value(0.44721359), "spring constant")
-        ("nx", po::value<unsigned int>(&nx)->default_value(20), "nx")
+        ("nx", po::value<unsigned int>(&nx)->default_value(19), "nx")
         ("h0_factor", po::value<double>(&h0_factor)->default_value(4.0), "h0 factor")
         ("dt", po::value<double>(&dt_aim)->default_value(0.1), "timestep")
     ;
@@ -113,6 +113,23 @@ int main(int argc, char **argv) {
     typename ParticlesType::value_type p;
     const double id_theta = 0.2;
     const double id_alpha = 30.0;
+    std::default_random_engine generator;
+    std::uniform_real_distribution<double> uniform(0.0+delta,L-delta);
+    for (int i=0; i<nx*nx; ++i) {
+        get<position>(p) = double2(uniform(generator),uniform(generator));
+        get<boundary>(p) = false;
+        get<kernel_constant>(p) = h0;
+        get<solution>(p) = 
+                    std::exp(-force_a*std::pow(get<position>(p)[0]-0.5,2)-force_b*std::pow(get<position>(p)[1]-0.5,2));
+        get<temperature>(p) = get<solution>(p);
+        get<velocity>(p) = double2(0,0);
+        get<resting_separation>(p) = delta;
+        get<temperature_weights>(p) = 0;
+        knots.push_back(p);
+    }
+
+    
+
     for (int i=0; i<=(int)nx; ++i) {
         for (int j=0; j<=(int)nx; ++j) {
             get<position>(p) = double2(i*delta,j*delta);
@@ -121,15 +138,14 @@ int main(int argc, char **argv) {
                 get<temperature>(p) = 
                     std::exp(-force_a*std::pow(get<position>(p)[0]-0.5,2)-force_b*std::pow(get<position>(p)[1]-0.5,2));
             } else {
-                get<boundary>(p) = false;
-                get<temperature>(p) = 0;
+                continue;
+                //get<boundary>(p) = false;
+                //get<temperature>(p) = 0;
             }
             get<kernel_constant>(p) = h0;
             get<solution>(p) = 
                     std::exp(-force_a*std::pow(get<position>(p)[0]-0.5,2)-force_b*std::pow(get<position>(p)[1]-0.5,2));
             get<temperature>(p) = get<solution>(p);
-
-
             get<velocity>(p) = double2(0,0);
             get<resting_separation>(p) = delta;
             get<temperature_weights>(p) = 0;
@@ -167,6 +183,10 @@ int main(int argc, char **argv) {
             pow(h[a]+h[b]-norm(dx),4)*(16.0*(h[a]+h[b]) + 64.0*norm(dx))/pow(h[a]+h[b],5)
             );
 
+    auto gradient_kernel = deep_copy(
+            -320.0*dx*pow(h[a]+h[b]-norm(dx),3)/pow(h[a]+h[b],5)
+            );
+
     auto laplace_kernel = deep_copy(
             //(-16*pow(h[a]+h[b],2)+64*dot(dx,dx))*exp(-4*dot(dx,dx)/pow(h[a]+h[b],2))/pow(h[a]+h[b],4)
             if_else(dot(dx,dx)==0.0,
@@ -195,22 +215,39 @@ int main(int argc, char **argv) {
 
     auto boundary_force = deep_copy(
             10*k*vector(
-                if_else(r[a][0]<0
-                    ,-r[a][0]
-                    ,if_else(r[a][0]>L
-                        ,L-r[a][0]
+                if_else(r[a][0]<delta
+                    ,delta-r[a][0]
+                    ,if_else(r[a][0]>L-delta
+                        ,L-delta-r[a][0]
                         ,0
                         )
                     )
-                ,if_else(r[a][1]<0
-                    ,-r[a][1]
-                    ,if_else(r[a][1]>L
-                        ,L-r[a][1]
+                ,if_else(r[a][1]<delta
+                    ,delta-r[a][1]
+                    ,if_else(r[a][1]>L-delta
+                        ,L-delta-r[a][1]
                         ,0
                         )
                     )
                 )
             );
+
+    auto neg_laplace_gradient = deep_copy( 
+            if_else(dot(dx,dx)==0,
+                vector(0,0),
+                dx*(
+                    307200.0*dx*dx/norm(dx) + (
+                        40960.0*dx*dx*(-2.5*(h[a]+h[b])+10*norm(dx)) + 
+                        102400.0*dx*dx*(h[a]+h[b]-norm(dx)) - 
+                        102400.0*dot(dx,dx)*(h[a]+h[b]-norm(dx))
+                        )
+                        /dot(dx,dx)
+                    )
+                * pow(h[a]+h[b]-norm(dx),5)
+                / pow(h[a]+h[b],10)
+            )
+            );
+
 
     auto radial_force = deep_copy(
             if_else(norm(r[a]-0.5)==0
@@ -253,6 +290,19 @@ int main(int argc, char **argv) {
                 ,norm(dx) < h[a]+h[b] 
             );
 
+    // adapt knot locations
+    for (int j=0; j<1000; j++) {
+        dvdt[a] = if_else(is_b[a],
+                vector(0,0),
+                sumv(b,norm(dx)<s[a]+s[b],force_kernel)
+                + boundary_force
+                );
+        v[a] += dt_adapt_aim*dvdt[a];
+        r[a] += dt_adapt_aim*v[a];
+    }
+    sol[a] = solution_eval;
+    u[a] = solution_eval;
+
     auto t0 = Clock::now();
     std::cout << "dt = " <<dt<< std::endl;
     for (int i=0; i < timesteps; i++) {
@@ -284,22 +334,16 @@ int main(int argc, char **argv) {
         #endif
 
         // adapt knot locations
-        if (i == timesteps/2) {
-            knots.reset_neighbour_search(2*delta);
-            for (int j=0; j<1000; j++) {
-                dvdt[a] = if_else(is_b[a],
-                        vector(0,0),
-                        sumv(b,norm(dx)<s[a]+s[b],force_kernel)
-                        + boundary_force
-                        - pow(delta,2)*radial_force 
-                        );
-                v[a] += dt_adapt_aim*dvdt[a];
-                r[a] += dt_adapt_aim*v[a];
-            }
-            knots.reset_neighbour_search(2*h0);
+        for (int j=0; j<100; j++) {
+            dvdt[a] = if_else(is_b[a],
+                    vector(0,0),
+                    sumv(b,norm(dx)<s[a]+s[b],force_kernel)
+                    - pow(delta,2)*sumv(b,norm(dx)<h[a]+h[b],gradient_kernel*w[b])
+                    + boundary_force
+                    );
+            v[a] += dt_adapt_aim*dvdt[a];
+            r[a] += dt_adapt_aim*v[a];
         }
-        
-       
     }
 }
 
