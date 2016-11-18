@@ -33,16 +33,31 @@ print '           k_ij'
 print '---------------------------------------'
 pprint(kij)
 pprint(simplify(kij))
-pprint(kijr)
-xeqi = kij.subs(hi,0.075).subs(hj,0.075).subs(xj,0.5).subs(yj,0.5).subs(yi,0.5)
-plot(xeqi,(xi,-1,2),adaptive=False,nb_of_points=500)
+#pprint(kijr)
+#xeqi = kij.subs(hi,0.075).subs(hj,0.075).subs(xj,0.5).subs(yj,0.5).subs(yi,0.5)
+#plot(xeqi,(xi,-1,2),adaptive=False,nb_of_points=500)
 
 print '-----------------------------------------------------'
 print '           norm([dk_ijdx,dk_ijdy]'
 print '----------------------------------------------------'
 
 gradient = Matrix([diff(kij,xi),diff(kij,yi)]).norm()
-pprint(simplify(gradient))
+gradient = simplify(gradient)
+pprint(gradient)
+
+print '-----------------------------------------------------'
+print '           d norm([dk_ijdx,dk_ijdy] dx'
+print '----------------------------------------------------'
+
+pprint(simplify(diff(gradient,xi)))
+
+print '-----------------------------------------------------'
+print '           d norm([dk_ijdx,dk_ijdy] dy'
+print '----------------------------------------------------'
+
+pprint(simplify(diff(gradient,yi)))
+
+
 
 print '-----------------------------------------------------'
 print '           dk_ijdx'
@@ -66,15 +81,15 @@ print '----------------------------------------------------'
 laplace = diff(diff(kij,xi),xi) + diff(diff(kij,yi),yi)
 laplacer = diff(diff(kijr,r),r)
 pprint(simplify(laplacer))
-pprint(2*simplify(laplacer).subs(r,0))
+pprint(2*simplify(laplacer.subs(r,0)))
 pprint(2*simplify(laplacer).subs(r,0).subs(hi,0.075).subs(hj,0.075))
 
-pprint(simplify(laplace.subs(xj,0.50000000123).subs(yj,0.50000000123).subs(yi,0.5).subs(xi,0.5)))
-pprint(simplify(laplace.subs(xj,0.50000000123).subs(yj,0.50000000123).subs(yi,0.5).subs(xi,0.5).subs(hi,0.075).subs(hj,0.075)))
+pprint(simplify(laplace.subs(xj,0.5000000000123).subs(yj,0.5).subs(yi,0.5).subs(xi,0.5)))
+pprint(simplify(laplace.subs(xj,0.5000000000123).subs(yj,0.50000000123).subs(yi,0.5).subs(xi,0.5).subs(hi,0.075).subs(hj,0.075)))
 
 pprint(simplify(laplace))
-xeqi = laplace.subs(hi,0.075).subs(hj,0.075).subs(xj,0.5).subs(yj,0.5).subs(yi,0.5)
-plot(xeqi,(xi,0.4,0.6),adaptive=False,nb_of_points=1000)
+xeqi = laplace.subs(hi,0.075).subs(hj,0.075).subs(xi,0.5).subs(yi,0.5).subs(yj,0.5)
+#plot(xeqi,(xj,0.4,0.6),adaptive=False,nb_of_points=1000)
 
 print '---------------------------------------'
 print '           dx/dt = force '
