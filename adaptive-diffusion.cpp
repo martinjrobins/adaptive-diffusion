@@ -86,17 +86,11 @@ int main(int argc, char **argv) {
 
     ABORIA_VARIABLE(boundary,uint8_t,"is boundary knot")
     ABORIA_VARIABLE(temperature,double,"temperature")
-    ABORIA_VARIABLE(solution,double,"solution")
-    ABORIA_VARIABLE(laplace_kernel_test,double,"laplace kernel")
-    ABORIA_VARIABLE(velocity,double2,"velocity")
-    ABORIA_VARIABLE(forcing_value,double,"forcing")
-    ABORIA_VARIABLE(gradient,double2,"gradient")
-    ABORIA_VARIABLE(acceleration,double2,"acceleration")
     ABORIA_VARIABLE(temperature_weights,double,"temperature weights")
     ABORIA_VARIABLE(kernel_constant,double,"kernel constant")
     ABORIA_VARIABLE(resting_separation,double,"resting separation")
 
-    typedef Particles<std::tuple<forcing_value,temperature,solution,laplace_kernel_test,velocity,temperature_weights,boundary,kernel_constant,gradient,acceleration,resting_separation>,2> ParticlesType;
+    typedef Particles<std::tuple<temperature,temperature_weights,boundary,kernel_constant,resting_separation>,2> ParticlesType;
     typedef position_d<2> position;
     ParticlesType knots;
 
@@ -118,38 +112,16 @@ int main(int argc, char **argv) {
     for (int i=0; i<nx*nx; ++i) {
         get<position>(p) = double2(uniform(generator),uniform(generator));
         get<boundary>(p) = false;
-        get<kernel_constant>(p) = h0;
-        get<solution>(p) = 
-                    std::exp(-force_a*std::pow(get<position>(p)[0]-0.5,2)-force_b*std::pow(get<position>(p)[1]-0.5,2));
-        get<temperature>(p) = get<solution>(p);
-        get<velocity>(p) = double2(0,0);
-        get<resting_separation>(p) = delta;
-        get<temperature_weights>(p) = 0;
         knots.push_back(p);
     }
-
-    
 
     for (int i=0; i<=(int)nx; ++i) {
         for (int j=0; j<=(int)nx; ++j) {
             get<position>(p) = double2(i*delta,j*delta);
             if ((i<=0)||(i>=nx)||(j<=0)||(j>=nx)) {
                 get<boundary>(p) = true;
-                get<temperature>(p) = 
-                    std::exp(-force_a*std::pow(get<position>(p)[0]-0.5,2)-force_b*std::pow(get<position>(p)[1]-0.5,2));
-            } else {
-                continue;
-                //get<boundary>(p) = false;
-                //get<temperature>(p) = 0;
+                knots.push_back(p);
             }
-            get<kernel_constant>(p) = h0;
-            get<solution>(p) = 
-                    std::exp(-force_a*std::pow(get<position>(p)[0]-0.5,2)-force_b*std::pow(get<position>(p)[1]-0.5,2));
-            get<temperature>(p) = get<solution>(p);
-            get<velocity>(p) = double2(0,0);
-            get<resting_separation>(p) = delta;
-            get<temperature_weights>(p) = 0;
-            knots.push_back(p);
         }
     }
 
@@ -159,16 +131,10 @@ int main(int argc, char **argv) {
 
     Symbol<boundary> is_b;
     Symbol<position> r;
-    Symbol<forcing_value> f;
     Symbol<kernel_constant> h;
-    Symbol<laplace_kernel_test> lktest;
-    Symbol<gradient> g;
-    Symbol<acceleration> dvdt;
     Symbol<temperature> u;
     Symbol<temperature_weights> w;
-    Symbol<velocity> v;
     Symbol<resting_separation> s;
-    Symbol<solution> sol;
     Label<0,ParticlesType> a(knots);
     Label<1,ParticlesType> b(knots);
     auto dx = create_dx(a,b);
@@ -200,7 +166,7 @@ int main(int argc, char **argv) {
             if_else(dot(dx,dx)==0,
                     0,
                     (-k*((s[a]+s[b])-norm(dx))/norm(dx))*dx
-                                +gamma*(v[b]-v[a])
+                                //+gamma*(v[b]-v[a])
                 )
             );
 
@@ -260,9 +226,6 @@ int main(int argc, char **argv) {
     typedef Eigen::Matrix<double,Eigen::Dynamic,1> vector_type; 
     typedef Eigen::Map<vector_type> map_type;
 
-    w[a] = 0;
-    get<temperature_weights>(knots)[std::pow(nx+1,2)/2] = 1.0;
-    lktest[a] = sum(b,norm(dx)<h[a]+h[b],laplace_kernel*w[b]);
 
 #ifdef HAVE_VTK
     vtkWriteGrid("init",1,knots.get_grid(true));
@@ -270,12 +233,7 @@ int main(int argc, char **argv) {
 
     const int timesteps = Tf/dt_aim;
     const double dt = Tf/timesteps;
-    const double dt_adapt_aim = (1.0/100.0)*PI/sqrt(2*k);
-    const int timesteps_adapt = std::ceil(dt/dt_adapt_aim);
-    const double dt_apapt = dt/timesteps_adapt;
-    std::cout << "doing "<<timesteps_adapt<<" adaptive timesteps"<<std::endl;
-    CHECK(timesteps_adapt>0,"assuming positive number of timestpes")
-    std::cout << "dt_adapt_aim = "<<dt_adapt_aim<<std::endl;
+    const double dt_adapt = (1.0/100.0)*PI/sqrt(2*k);
 
     //implicit euler step
     // Ku_n - Ku_n-1 = dt*K_lu_n + dt * forcing_n
@@ -290,17 +248,19 @@ int main(int argc, char **argv) {
                 ,norm(dx) < h[a]+h[b] 
             );
 
+    s[a] = delta;
+
     // adapt knot locations
     for (int j=0; j<1000; j++) {
-        dvdt[a] = if_else(is_b[a],
+        r[a] += dt_adapt*if_else(is_b[a],
                 vector(0,0),
                 sumv(b,norm(dx)<s[a]+s[b],force_kernel)
                 + boundary_force
                 );
-        v[a] += dt_adapt_aim*dvdt[a];
-        r[a] += dt_adapt_aim*v[a];
     }
-    sol[a] = solution_eval;
+
+    w[a] = 0;
+    h[a] = h0;
     u[a] = solution_eval;
 
     auto t0 = Clock::now();
@@ -323,26 +283,23 @@ int main(int argc, char **argv) {
         u[a] = sum(b,norm(dx)<h[a]+h[b],kernel*w[b]);
 
         // compare against true solution
-        sol[a] = solution_eval;
-        const double norm2 = eval(sqrt(sum(a,true,pow(sol[a]-u[a],2))));
-        const double scale = eval(sqrt(sum(a,true,pow(sol[a],2))));
+        const double norm2 = eval(sqrt(sum(a,true,pow(solution_eval-u[a],2))));
+        const double scale = eval(sqrt(sum(a,true,pow(solution_eval,2))));
         std::cout << "norm2 error is "<<norm2/scale<<std::endl;
 
         // write knots to file
         #ifdef HAVE_VTK
-        vtkWriteGrid("explicit",i,knots.get_grid(true));
+        vtkWriteGrid("explicit-random",i,knots.get_grid(true));
         #endif
 
         // adapt knot locations
         for (int j=0; j<100; j++) {
-            dvdt[a] = if_else(is_b[a],
-                    vector(0,0),
-                    sumv(b,norm(dx)<s[a]+s[b],force_kernel)
-                    - pow(delta,2)*sumv(b,norm(dx)<h[a]+h[b],gradient_kernel*w[b])
-                    + boundary_force
+            r[a] += dt_adapt*if_else(is_b[a],
+                            vector(0,0),
+                            sumv(b,norm(dx)<s[a]+s[b],force_kernel)
+                            - pow(delta,2)*sumv(b,norm(dx)<h[a]+h[b],gradient_kernel*w[b])
+                            + boundary_force
                     );
-            v[a] += dt_adapt_aim*dvdt[a];
-            r[a] += dt_adapt_aim*v[a];
         }
     }
 }
