@@ -32,10 +32,25 @@ print '---------------------------------------'
 print '           k_ij'
 print '---------------------------------------'
 pprint(kij)
+print latex(kij)
 pprint(simplify(kij))
+
 #pprint(kijr)
 #xeqi = kij.subs(hi,0.075).subs(hj,0.075).subs(xj,0.5).subs(yj,0.5).subs(yi,0.5)
 #plot(xeqi,(xi,-1,2),adaptive=False,nb_of_points=500)
+
+laplace = diff(diff(kij,xi),xi) + diff(diff(kij,yi),yi)
+#pprint(simplify(laplace))
+print 'check if Im right'
+norm = sqrt((xi-xj)**2+(yi-yj)**2)
+norm2 = (xi-xj)**2+(yi-yj)**2
+simple = 65536.0*((hi+hj-norm)**2)*(0.001953125*(-2.5*hi-2.5*hj+10*norm) + 0.0048828125*(hi+hj-norm) - 0.009765625*(hi+hj-norm))/(((hi+hj)**5))
+#pprint(simplify(expand(laplace-simple)))
+
+xeqi = laplace.subs(hi,0.075).subs(hj,0.075).subs(xi,0.5).subs(yi,0.5).subs(yj,0.500000001)
+xeqi2 = simple.subs(hi,0.075).subs(hj,0.075).subs(xi,0.5).subs(yi,0.5).subs(yj,0.500000001)
+plot(xeqi,xeqi2,(xj,0.3,0.7),adaptive=False,nb_of_points=1000)
+
 
 print '-----------------------------------------------------'
 print '           [dfdx,dfdy]'
@@ -103,8 +118,13 @@ print '           du/dt = d^2k_ijdx^2 + d^2k_ijdy^2'
 print '----------------------------------------------------'
 
 laplace = diff(diff(kij,xi),xi) + diff(diff(kij,yi),yi)
+print 'check if Im right'
+simple = 65536*(hi+hj-sqrt((xi-xj)**2+(yi-yj)**2))*((xi-xj)**2+(yi-yj)**2)*(0.001953125*(-2.5*hi-2.5*hj+10*sqrt((xi-xj)**2+(yi-yj)**2)) - 0.0048828125*(hi+hj-sqrt((xi-xj)**2+(yi-yj)**2)))/((hi+hi+hj)**5*((xi-xj)**2+(yi-yj)**2))
+#pprint(simplify(laplace-simple))
+
 laplacer = diff(diff(kijr,r),r)
 pprint(simplify(laplacer))
+print latex(simplify(laplace))
 pprint(2*simplify(laplacer.subs(r,0)))
 pprint(2*simplify(laplacer).subs(r,0).subs(hi,0.075).subs(hj,0.075))
 
@@ -113,7 +133,8 @@ pprint(simplify(laplace.subs(xj,0.5000000000123).subs(yj,0.50000000123).subs(yi,
 
 pprint(simplify(laplace))
 xeqi = laplace.subs(hi,0.075).subs(hj,0.075).subs(xi,0.5).subs(yi,0.5).subs(yj,0.5)
-#plot(xeqi,(xj,0.4,0.6),adaptive=False,nb_of_points=1000)
+xeqi2 = simple.subs(hi,0.075).subs(hj,0.075).subs(xi,0.5).subs(yi,0.5).subs(yj,0.5)
+plot(xeqi,xeqi2,(xj,0.4,0.6),adaptive=False,nb_of_points=1000)
 
 print '---------------------------------------'
 print '           dx/dt = force '

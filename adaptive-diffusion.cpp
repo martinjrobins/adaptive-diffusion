@@ -150,11 +150,15 @@ int main(int argc, char **argv) {
         );
 
     auto laplace_kernel = deep_copy(
-        if_else(dot(dx,dx)==0.0
-            ,-2.0*320.0/pow(h[a]+h[b],2)
-            ,65536.0*pow(h[a]+h[b]-norm(dx),2)*(0.001953125*pow(dx[0],2)*(-2.5*(h[a]+h[b]) + 10.0*norm(dx)) + 0.0048828125*pow(dx[0],2)*(h[a]+h[b]-norm(dx)) + 0.001953125*pow(dx[1],2)*(-2.5*(h[a]+h[b])+10.0*norm(dx)) + 0.0048828125*pow(dx[1],2)*(h[a]+h[b]-norm(dx)) - 0.009765625*dot(dx,dx)*(h[a]+h[b]-norm(dx)))/(pow(h[a]+h[b],5)*dot(dx,dx))
+        //if_else(dot(dx,dx)==0.0
+            //,-2.0*320.0/pow(h[a]+h[b],2)
+            //,65536.0*pow(h[a]+h[b]-norm(dx),2)*(0.001953125*pow(dx[0],2)*(-2.5*(h[a]+h[b]) + 10.0*norm(dx)) + 0.0048828125*pow(dx[0],2)*(h[a]+h[b]-norm(dx)) + 0.001953125*pow(dx[1],2)*(-2.5*(h[a]+h[b])+10.0*norm(dx)) + 0.0048828125*pow(dx[1],2)*(h[a]+h[b]-norm(dx)) - 0.009765625*dot(dx,dx)*(h[a]+h[b]-norm(dx)))/(pow(h[a]+h[b],5)*dot(dx,dx))
+            pow(h[a]+h[b]-norm(dx),2)/pow(h[a]+h[b],5)*(128.0*(-2.5*(h[a]+h[b]) + 10.0*norm(dx)) - 320.0*(h[a]+h[b]-norm(dx)))
 
-            )
+            //,65536.0*pow(h[a]+h[b]-norm(dx),2)*(0.001953125*(-2.5*(h[a]+h[b]) + 10.0*norm(dx)) - 0.0048828125*(h[a]+h[b]-norm(dx)))/(pow(h[a]+h[b],5))
+            //,320.0*pow(h[a]+h[b]-norm(dx),2)*(dot(dx,dx)*(-2.5*(h[a]+h[b]) + 10.0*norm(dx)))/(pow(h[a]+h[b],5)*dot(dx,dx))
+
+            //)
         );
 
     auto force_kernel = deep_copy(
