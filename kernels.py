@@ -58,6 +58,7 @@ print '----------------------------------------------------'
 
 gradient = Matrix([diff(kij,xi),diff(kij,yi)])
 pprint(simplify(gradient))
+print latex(simplify(gradient)[0])
 
 print '-----------------------------------------------------'
 print '           [df2dx2,df2dxy]'

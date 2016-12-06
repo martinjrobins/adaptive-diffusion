@@ -86,10 +86,11 @@ int main(int argc, char **argv) {
 
     ABORIA_VARIABLE(boundary,uint8_t,"is boundary knot")
     ABORIA_VARIABLE(temperature,double,"temperature")
+    ABORIA_VARIABLE(solution,double,"solution")
     ABORIA_VARIABLE(temperature_weights,double,"temperature weights")
     ABORIA_VARIABLE(kernel_constant,double,"kernel constant")
 
-    typedef Particles<std::tuple<temperature,temperature_weights,boundary,kernel_constant>,2> ParticlesType;
+    typedef Particles<std::tuple<temperature,solution,temperature_weights,boundary,kernel_constant>,2> ParticlesType;
     typedef position_d<2> position;
     ParticlesType knots;
 
@@ -130,6 +131,7 @@ int main(int argc, char **argv) {
     Symbol<position> r;
     Symbol<kernel_constant> h;
     Symbol<temperature> u;
+    Symbol<solution> sol;
     Symbol<temperature_weights> w;
     Label<0,ParticlesType> i(knots);
     Label<1,ParticlesType> j(knots);
@@ -204,6 +206,7 @@ int main(int argc, char **argv) {
     w[i] = 0;
     h[i] = h0;
     u[i] = solution_eval;
+    sol[i] = solution_eval;
 
     auto t0 = Clock::now();
     std::cout << "dt = " <<dt<< std::endl;
@@ -245,6 +248,7 @@ int main(int argc, char **argv) {
                             + boundary_force
                     );
         }
+        sol[i] = solution_eval;
     }
 }
 
